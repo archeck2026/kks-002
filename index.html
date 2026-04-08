@@ -1,75 +1,66 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BuildCheck SaaS - 실시간 토지 분석</title>
-    <style>
-        :root { --primary-color: #2563eb; }
-        body { font-family: 'Pretendard', sans-serif; background: #f8fafc; padding: 20px; color: #334155; }
+ body { font-family: 'Pretendard', sans-serif; background: #f8fafc; padding: 20px; color: #334155; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
         h2 { text-align: center; color: var(--primary-color); margin-bottom: 25px; }
+        .input-group { margin-bottom: 15px; }
+        input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 14px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: opacity 0.2s; }
         input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; font-size: 16px; margin-bottom: 10px; }
         button { width: 100%; padding: 14px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
         button:disabled { background: #94a3b8; }
         #result { margin-top: 25px; display: none; }
         .card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; background: #fff; }
-        .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
-        .label { font-weight: 600; color: #64748b; }
-        .loading { text-align: center; display: none; margin: 10px 0; color: var(--primary-color); }
-    </style>
-</head>
-<body>
+@@ -24,9 +23,7 @@
 
 <div class="container">
     <h2>🏗️ BuildCheck SaaS</h2>
+    <div class="input-group">
+        <input type="text" id="addressInput" placeholder="지번 주소를 입력하세요 (예: 용대리 123)">
+    </div>
     <input type="text" id="addressInput" placeholder="지번 주소를 입력하세요 (예: 양구읍 중리 14-2)">
     <button id="searchBtn" onclick="processSearch()">분석 시작</button>
     <div id="loading" class="loading">데이터 분석 중...</div>
 
-    <div id="result">
-        <div class="card">
-            <div class="row"><span class="label">📍 소재지</span> <span id="resAddr">-</span></div>
-            <div class="row"><span class="label">📏 대지면적</span> <span id="resArea">-</span></div>
-            <div class="row"><span class="label">🏢 용도지역</span> <span id="resZone">-</span></div>
-            <div class="row"><span class="label">🛡️ 기타구역</span> <span id="resDistricts">-</span></div>
-        </div>
-    </div>
+@@ -41,9 +38,9 @@ <h2>🏗️ BuildCheck SaaS</h2>
 </div>
 
 <script>
+    // ⚠️ 여기에 본인의 API 키를 입력하세요.
+    const VWORLD_KEY = '055EEA4C-6AD4-360E-804D-58E6AD646275'; 
+    const DATA_GO_KEY = '20e4f2be308fd39be382f04075eda64da25c059ed4b63ae192159efa89bc5c4d';
     // ⚠️ 1. Vworld 키와 2. 스크린샷에서 확인한 공공데이터 키를 입력하세요.
     const VWORLD_KEY = 'DB92072F-017E-35C6-B7EA-29BC7D400F75'; 
     const DATA_GO_KEY = '2e9cbc4e5549de8512e71991fbef85902989c3765e378fb6bab222f40a6cfa0b';
 
     async function processSearch() {
         const addr = document.getElementById('addressInput').value;
-        const btn = document.getElementById('searchBtn');
-        const loading = document.getElementById('loading');
-        const resultDiv = document.getElementById('result');
-
-        if(!addr) return alert("주소를 입력해주세요.");
-
-        btn.disabled = true;
-        loading.style.display = 'block';
+@@ -58,39 +55,41 @@ <h2>🏗️ BuildCheck SaaS</h2>
         resultDiv.style.display = 'none';
 
         try {
+            // 1. Vworld API를 통해 주소를 PNU 코드로 변환
             // [STEP 1] Vworld API: 주소를 PNU 코드로 변환
             const vworldUrl = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4324&address=${encodeURIComponent(addr)}&refine=true&simple=false&format=json&type=parcel&key=${VWORLD_KEY}`;
+            
             const vResponse = await fetch(vworldUrl);
             const vData = await vResponse.json();
 
+            if (vData.response.status !== "OK") throw new Error("주소를 찾을 수 없습니다.");
+            
+            // PNU는 필지 고유 번호 (19자리)
             if (vData.response.status !== "OK") throw new Error("Vworld: 주소를 찾을 수 없습니다. (도메인 등록 확인 필요)");
             const pnu = vData.response.refined.structure.pnu;
 
+            // 2. 토지이용계획 API 호출 (공공데이터포털)
+            const landUrl = `https://apis.data.go.kr/1611000/LuService/getLuInfo?serviceKey=${DATA_GO_KEY}&pnu=${pnu}&type=json`;
             // [STEP 2] 공공데이터 API: 토지이용계획 정보 조회 (스크린샷 주소 반영)
             // 엔드포인트를 스크린샷의 1613000 버전으로 수정하고 https를 강제 적용했습니다.
             const landUrl = `https://apis.data.go.kr/1613000/arLandUseInfoService/getLuInfo?serviceKey=${DATA_GO_KEY}&pnu=${pnu}&_type=json`;
-            
+
             const lResponse = await fetch(landUrl);
             const lData = await lResponse.json();
 
+            // 데이터 렌더링
+            const info = lData.fields[0]; // 첫 번째 결과값 사용
             // [STEP 3] 데이터 매핑 (API 구조에 따라 소폭 조정)
             // 서비스마다 필드명이 다를 수 있어 안전하게 처리했습니다.
             const item = lData.response?.body?.items?.item || lData.fields?.[0];
@@ -77,12 +68,16 @@
             if(!item) throw new Error("토지 정보를 가져오지 못했습니다. (API 승인 대기 또는 키 오류)");
 
             document.getElementById('resAddr').innerText = addr;
+            document.getElementById('resArea').innerText = info.lndpclAr + " ㎡";
+            document.getElementById('resZone').innerText = info.ladUseNm;
+            document.getElementById('resDistricts').innerText = info.etcLawNm || "해당 없음";
             document.getElementById('resArea').innerText = (item.lndpclAr || item.area || "0") + " ㎡";
             document.getElementById('resZone').innerText = item.ladUseNm || item.useNm || "정보 없음";
             document.getElementById('resDistricts').innerText = item.etcLawNm || "해당 없음";
 
             resultDiv.style.display = 'block';
         } catch (error) {
+            alert("에러 발생: " + error.message);
             alert("⚠️ 에러: " + error.message);
             console.error(error);
         } finally {
@@ -91,5 +86,7 @@
         }
     }
 </script>
+
 </body>
+</html>
 </html>
